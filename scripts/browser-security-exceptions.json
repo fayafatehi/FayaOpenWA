@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "exceptions": [
+    {
+      "id": "amd64-cft-scanner-visibility",
+      "architecture": "amd64",
+      "product": "chrome-for-testing",
+      "advisory": "scanner-visibility-gap",
+      "reason": "Chrome for Testing is installed under /opt/puppeteer and is not owned by dpkg or an application lockfile, so the generic Trivy OS/library scan does not establish its live CVE state. The image-scan jobs record the exact runtime version separately.",
+      "reviewBy": "2026-10-21",
+      "removeWhen": "A live browser-vulnerability intelligence source is enforced for the observed Chrome for Testing version, or the browser moves to a package/source covered by the release vulnerability gate."
+    },
+    {
+      "id": "arm64-distro-chromium-unfixed",
+      "architecture": "arm64",
+      "product": "chromium",
+      "advisory": "vendor-unfixed-advisories",
+      "reason": "The arm64 browser is Debian Chromium. Trivy sees the package, but the release scan intentionally uses ignore-unfixed, so HIGH/CRITICAL advisories without a vendor fix are not a release blocker. The image-scan jobs record the exact runtime version for review.",
+      "reviewBy": "2026-10-21",
+      "removeWhen": "No accepted unfixed HIGH/CRITICAL Chromium exposure remains, or arm64 moves to a browser source with an enforced live advisory gate."
+    }
+  ]
+}
