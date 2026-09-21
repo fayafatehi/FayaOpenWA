@@ -7,10 +7,10 @@ it is moved behind a separate OS-isolated runner.
 
 ## Trust tiers
 
-| Tier                          | Examples                                           | Runs                 | Security meaning |
-| ----------------------------- | -------------------------------------------------- | -------------------- | ---------------- |
-| **Built-in (trusted)**        | the two engine adapters (whatsapp-web.js, baileys) | in-process           | trusted application code |
-| **`trusted-inprocess`**     | installed extension plugins                       | in a `worker_thread` | trusted code with failure/resource containment |
+| Tier                        | Examples                                           | Runs                 | Security meaning                                           |
+| --------------------------- | -------------------------------------------------- | -------------------- | ---------------------------------------------------------- |
+| **Built-in (trusted)**      | the two engine adapters (whatsapp-web.js, baileys) | in-process           | trusted application code                                   |
+| **`trusted-inprocess`**   | installed extension plugins                        | in a `worker_thread` | trusted code with failure/resource containment             |
 | **`untrusted` declaration** | future hostile-code plugins                        | **refused today**    | requires an OS-isolated runner that is not implemented yet |
 
 A plugin manifest may omit `trustMode` (backward-compatible `trusted-inprocess`) or set
