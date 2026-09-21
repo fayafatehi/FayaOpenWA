@@ -20,7 +20,7 @@ import { executableLines } from './workflow-lines';
 
 const workflowDir = path.join(__dirname, '..', '..', '.github', 'workflows');
 
-type Step = { run?: string };
+type Step = { name?: string; run?: string; env?: Record<string, string> };
 type Workflow = { jobs?: Record<string, { steps?: Step[] }> };
 
 const gateCommands = (file: string, job: string): string[] => {
@@ -52,5 +52,23 @@ describe('release gate parity (the tag path runs every branch gate)', () => {
     // The postgres lane names its specs inline, so a spec added to ci.yml alone would otherwise
     // leave the tag path running a strictly weaker suite than the branch it was cut from.
     expect(gateCommands('release.yml', 'test-postgres').join(' ')).toContain('message-list-ordering.pg.spec.ts');
+  });
+});
+
+
+describe('dependency audit availability policy is fail-closed in security-sensitive workflows', () => {
+  const cases: Array<[file: string, job: string]> = [
+    ['ci.yml', 'audit'],
+    ['security-scan.yml', 'audit'],
+    ['release.yml', 'lint'],
+  ];
+
+  it.each(cases)('%s %s root audit requires advisory evidence', (file, job) => {
+    const workflow = yaml.load(fs.readFileSync(path.join(workflowDir, file), 'utf8')) as Workflow;
+    const steps = workflow.jobs?.[job]?.steps ?? [];
+    const audit = steps.find(step => step.name === 'Security audit' && step.run?.trim() === 'npm run check:audit');
+
+    expect(audit).toBeDefined();
+    expect(audit?.env?.AUDIT_UNAVAILABLE_POLICY).toBe('fail');
   });
 });
