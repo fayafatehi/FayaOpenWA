@@ -302,7 +302,9 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
         path: '/mcp',
       }),
     );
-    const successContext = (h.auditService.logInfo.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>)[0][1];
+    const successContext = (
+      h.auditService.logInfo.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>
+    )[0][1];
     expect(successContext.metadata).toMatchObject({
       tool: 'MessageSendText',
       tier: 'write',
@@ -331,7 +333,9 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
         errorMessage: 'provider down',
       }),
     );
-    const failureContext = (h.auditService.logWarn.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>)[0][1];
+    const failureContext = (
+      h.auditService.logWarn.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>
+    )[0][1];
     expect(failureContext.metadata).toMatchObject({
       tool: 'MessageSendText',
       tier: 'write',
