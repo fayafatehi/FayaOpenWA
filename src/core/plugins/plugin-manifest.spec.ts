@@ -12,6 +12,19 @@ describe('validatePluginManifest', () => {
     expect(() => validatePluginManifest({ ...valid })).not.toThrow();
   });
 
+  it('keeps missing or explicit trusted-inprocess trust mode backward-compatible', () => {
+    expect(() => validatePluginManifest({ ...valid })).not.toThrow();
+    expect(() => validatePluginManifest({ ...valid, trustMode: 'trusted-inprocess' })).not.toThrow();
+  });
+
+  it('refuses untrusted plugins until an isolated runner exists', () => {
+    expect(() => validatePluginManifest({ ...valid, trustMode: 'untrusted' })).toThrow(/untrusted.*isolated runner/i);
+  });
+
+  it('rejects unknown trust modes instead of silently treating them as trusted', () => {
+    expect(() => validatePluginManifest({ ...valid, trustMode: 'sandboxed-maybe' })).toThrow(/trustMode/i);
+  });
+
   it('rejects a non-object manifest (null / array / scalar)', () => {
     for (const body of [null, [], 'x', 5, true]) {
       expect(() => validatePluginManifest(body)).toThrow(/must be a JSON object/i);
