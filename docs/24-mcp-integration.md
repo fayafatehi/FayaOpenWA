@@ -20,13 +20,13 @@
 | **Per-key rate limiter**                     | ✅ Implemented | `src/modules/mcp/mcp-rate-limit.ts`                  |
 | **Result shaping (smart/json)**              | ✅ Implemented | `src/modules/mcp/tool-result.ts`                     |
 
-| Capability                        | Status         | Notes                                                                 |
-| --------------------------------- | -------------- | --------------------------------------------------------------------- |
-| **Read-only mode**                | ✅ Implemented | **Default read-only**; set `MCP_READONLY=false` to expose write tools |
-| **OAuth 2.1 (public exposure)**   | 🔜 Planned     | Static API key is used today (suitable for self-hosted/internal)      |
-| **Agent-action audit provenance** | 🔜 Planned     | Mark audited actions as agent-initiated                               |
-| **Env-tunable rate limits**       | ✅ Implemented | `MCP_RATE_LIMIT_MAX` / `MCP_RATE_LIMIT_WINDOW_MS`                     |
-| **Additional tool domains**       | 🔜 Planned     | templates / channels / catalog / status (labels/automation now ship)  |
+| Capability                      | Status         | Notes                                                                 |
+| ------------------------------- | -------------- | --------------------------------------------------------------------- |
+| **Read-only mode**              | ✅ Implemented | **Default read-only**; set `MCP_READONLY=false` to expose write tools |
+| **OAuth 2.1 (public exposure)** | 🔜 Planned     | Static API key is used today (suitable for self-hosted/internal)      |
+| **MCP tool audit provenance**   | ✅ Implemented | Success/failure records include API-key id, tool/tier and auth mode   |
+| **Env-tunable rate limits**     | ✅ Implemented | `MCP_RATE_LIMIT_MAX` / `MCP_RATE_LIMIT_WINDOW_MS`                     |
+| **Additional tool domains**     | 🔜 Planned     | templates / channels / catalog / status (labels/automation now ship)  |
 
 ---
 
@@ -183,6 +183,7 @@ only when an agent genuinely needs to send messages / mutate state.
 - **Do not expose `/mcp` to the public internet** without a fronting authentication proxy.
   The static API key is appropriate for a self-hosted, locally/network-reached deployment;
   public exposure should wait for OAuth 2.1 support (planned).
+- Every authenticated MCP tool call writes success/failure provenance with the API-key id, tool name/tier, HTTP method/path, and `authMode=api-key`; raw credentials are never recorded.
 
 ## 24.6 Enabling & Client Setup
 
@@ -248,7 +249,7 @@ Guidelines:
 
 - **OAuth 2.1 / PKCE** for public, internet-facing deployments (today: static API key,
   intended for self-hosted/internal use).
-- **Agent-action audit provenance** — record that an audited action was agent-initiated
+- **Broader downstream agent provenance** — MCP tool calls themselves are audited today; propagating that agent identity into every downstream domain audit remains future work
   and by which key.
 - **Expansion-pack tool domains** — templates, channels, catalog, and status are not in the
   default surface yet. Labels and automation-rule reads already are.

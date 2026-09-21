@@ -50,6 +50,28 @@ the README and `docs/` — in particular `CORS_ORIGINS`, `ALLOW_DEV_API_KEY`,
 Never expose the dashboard/API to the public internet with the development API key
 enabled.
 
+### Production hardening gates
+
+The `docker-proxy` is disabled by default because Docker container-create access can become
+host-root-equivalent after an API compromise. Normal API startup does not require Docker access.
+Enable the proxy only when you intentionally use the built-in datastore orchestration:
+
+```bash
+docker compose --profile orchestration up -d
+```
+
+The root dependency gate supports a developer-friendly warning mode, but every security-sensitive
+GitHub workflow sets `AUDIT_UNAVAILABLE_POLICY=fail`. CI, the scheduled security scan, and the
+release gate therefore cannot report success when the npm advisory service is unavailable.
+
+Browser assurance is tracked separately from the generic image CVE scan. Run
+`npm run check:browser-security` to validate the Dockerfile browser strategy and the dated
+exceptions in `scripts/browser-security-exceptions.json`. Scheduled and release image scans also
+execute `/usr/local/bin/puppeteer-chrome --version` for both architectures and record the observed
+browser identity. This check does not establish live advisory completeness: amd64 Chrome for Testing
+is outside dpkg/lockfile visibility, while the arm64 Trivy lane deliberately ignores vendor-unfixed
+findings. The emitted `advisoryCoverage=not-verified` value is intentional.
+
 If you created your `.env` by copying `.env.example` before this advisory, check it for
 `ENABLE_SWAGGER=true`. Earlier templates shipped that line uncommented alongside
 `NODE_ENV=production`, so a copied file pinned the opt-in that production otherwise
@@ -74,9 +96,14 @@ The compensating gates on the install path:
   install does (`PLUGIN_INSTALL_REQUIRE_PIN`, opt-out documented in `.env.example`);
 - the package manifest is strictly validated and symlink traps are detected at unpack.
 
-If you operate a fleet of plugins you do not fully trust, do not install them into the
-OpenWA process — run them in a separate container/VM with an OS-level sandbox and reach
-OpenWA over the API like any other client.
+Plugin manifests may now declare `trustMode`. Omitted or `trusted-inprocess` keeps the
+current worker-thread runtime. `untrusted` fails closed at both install and boot because
+no OS-isolated plugin runner exists yet; OpenWA will not silently downgrade an explicit
+untrusted declaration into the same-process worker runtime.
+
+If you operate plugins you do not fully trust, do not install them into the OpenWA process —
+run them in a separate container/VM with an OS-level sandbox and reach OpenWA over the API
+like any other client.
 
 ### Docker socket proxy — scope and residual risk
 
@@ -101,11 +128,21 @@ Mitigations in place: the proxy is unreachable except from `openwa-api` (dedicat
 `internal: true` network), the orchestration endpoints require an ADMIN-role API key,
 both teardown and start are constrained to the three managed profiles (`postgres`,
 `redis`, `minio`) — non-managed names are dropped before reaching `DockerService` —
-and OpenWA itself never issues deletes (profile teardown is stop-only). If you do not
-use the built-in datastore orchestration (Dashboard → Infrastructure built-in
-toggles), disable the proxy entirely — see the `docker-proxy` comments in
-`docker-compose.yml`; `DockerService` then reports Docker unavailable and
-orchestration degrades gracefully.
+and OpenWA itself never issues deletes (profile teardown is stop-only). The shipped Compose file
+therefore keeps the proxy behind the explicit `orchestration` profile. Without that profile,
+`DockerService` reports Docker unavailable and orchestration degrades gracefully; with it, treat
+the API container as part of the Docker daemon trust boundary.
+
+### API-key hash migration and pepper
+
+API-key rows carry an explicit hash version. Existing rows are migrated as `sha256-v1`.
+When `API_KEY_PEPPER` is configured, new keys use `hmac-sha256-v1`. A successful
+authentication against a legacy SHA-256 row upgrades that row atomically to the HMAC
+representation, so enabling a pepper no longer requires an immediate all-keys outage.
+
+Changing or losing an already-active pepper still makes existing `hmac-sha256-v1` rows
+unverifiable. Treat the pepper as durable secret material and plan key rotation before
+rotating it. Plaintext keys and pepper values are never written to the audit log.
 
 ### Session-restricted API keys
 

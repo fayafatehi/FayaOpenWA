@@ -28,6 +28,7 @@ function makeRow(overrides: Partial<ApiKey> = {}): ApiKey {
     id: 'key-1',
     name: 'Test Key',
     keyHash: 'hash',
+    hashVersion: 'sha256-v1',
     keyPrefix: 'prefix',
     role: ApiKeyRole.OPERATOR,
     allowedIps: null,

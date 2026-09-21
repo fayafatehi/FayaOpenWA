@@ -5,7 +5,14 @@ import { join } from 'path';
 const yaml = require('js-yaml') as { load: (src: string) => unknown };
 
 interface ComposeFile {
-  services: Record<string, { networks?: string[] }>;
+  services: Record<
+    string,
+    {
+      networks?: string[];
+      profiles?: string[];
+      depends_on?: Record<string, { required?: boolean }>;
+    }
+  >;
   networks: Record<string, { internal?: boolean }>;
 }
 
@@ -26,5 +33,13 @@ describe('docker-compose network segmentation', () => {
 
   it('lets openwa-api reach the proxy via the internal network', () => {
     expect(compose.services['openwa-api'].networks).toContain('internal-docker');
+  });
+
+  it('keeps docker-proxy disabled by default behind the explicit orchestration profile', () => {
+    expect(compose.services['docker-proxy'].profiles).toEqual(['orchestration']);
+  });
+
+  it('does not make openwa-api startup require the optional docker-proxy', () => {
+    expect(compose.services['openwa-api'].depends_on?.['docker-proxy']?.required).not.toBe(true);
   });
 });

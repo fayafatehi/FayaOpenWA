@@ -7,23 +7,35 @@ import configuration, {
 } from './configuration';
 
 describe('configuration — main DB synchronize', () => {
-  const orig = process.env.MAIN_DATABASE_SYNCHRONIZE;
+  const origSync = process.env.MAIN_DATABASE_SYNCHRONIZE;
+  const origNodeEnv = process.env.NODE_ENV;
 
   afterEach(() => {
-    if (orig === undefined) delete process.env.MAIN_DATABASE_SYNCHRONIZE;
-    else process.env.MAIN_DATABASE_SYNCHRONIZE = orig;
+    if (origSync === undefined) delete process.env.MAIN_DATABASE_SYNCHRONIZE;
+    else process.env.MAIN_DATABASE_SYNCHRONIZE = origSync;
+    if (origNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = origNodeEnv;
   });
 
-  it('defaults main synchronize ON (zero-config first boot)', () => {
+  it('defaults production main DB to migration-managed schema', () => {
     delete process.env.MAIN_DATABASE_SYNCHRONIZE;
+    process.env.NODE_ENV = 'production';
+    expect(configuration().database.synchronize).toBe(false);
+  });
+
+  it('keeps zero-config synchronize ON outside production', () => {
+    delete process.env.MAIN_DATABASE_SYNCHRONIZE;
+    process.env.NODE_ENV = 'development';
     expect(configuration().database.synchronize).toBe(true);
   });
 
-  it('disables synchronize only when MAIN_DATABASE_SYNCHRONIZE="false"', () => {
-    process.env.MAIN_DATABASE_SYNCHRONIZE = 'false';
-    expect(configuration().database.synchronize).toBe(false);
+  it('honors an explicit MAIN_DATABASE_SYNCHRONIZE override', () => {
+    process.env.NODE_ENV = 'production';
     process.env.MAIN_DATABASE_SYNCHRONIZE = 'true';
     expect(configuration().database.synchronize).toBe(true);
+    process.env.NODE_ENV = 'development';
+    process.env.MAIN_DATABASE_SYNCHRONIZE = 'false';
+    expect(configuration().database.synchronize).toBe(false);
   });
 });
 

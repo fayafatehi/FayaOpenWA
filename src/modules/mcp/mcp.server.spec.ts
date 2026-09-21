@@ -201,7 +201,7 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
     routeHandler: (req: Request, res: Response) => Promise<void>;
     tool: AnyToolDescriptor;
     authService: { validateApiKey: jest.Mock; hasPermission: jest.Mock };
-    auditService: { logWarn: jest.Mock };
+    auditService: { logWarn: jest.Mock; logInfo: jest.Mock };
   }
 
   const mount = (): Harness => {
@@ -215,7 +215,7 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
     } as unknown as AnyToolDescriptor;
     const registry = { list: jest.fn(() => [tool]) };
     const authService = { validateApiKey: jest.fn(), hasPermission: jest.fn(() => true) };
-    const auditService = { logWarn: jest.fn() };
+    const auditService = { logWarn: jest.fn(), logInfo: jest.fn() };
     let routeHandlers: unknown[] = [];
     const adapter = {
       post: jest.fn((_path: string, ...handlers: unknown[]) => {
@@ -282,6 +282,66 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
     expect(mockHandleRequest).toHaveBeenCalledWith(req, res, body);
     expect(res.on).toHaveBeenCalledWith('close', expect.any(Function)); // per-request teardown wired
     expect(res.status).not.toHaveBeenCalled(); // no error fallback
+  });
+
+  it('records successful MCP tool provenance without the raw API key', async () => {
+    const h = mount();
+    h.authService.validateApiKey.mockResolvedValue({ id: 'key-1', role: 'operator' });
+    await post(h, { jsonrpc: '2.0', id: 1 }, { 'x-api-key': 'super-secret-key' });
+
+    await toolCallback()(
+      { sessionId: 's1', to: '123', text: 'hi' },
+      { requestInfo: { headers: { 'x-api-key': 'super-secret-key' } } },
+    );
+
+    expect(h.auditService.logInfo).toHaveBeenCalledWith(
+      AuditAction.MCP_TOOL_INVOKED,
+      expect.objectContaining({
+        apiKeyId: 'key-1',
+        method: 'POST',
+        path: '/mcp',
+      }),
+    );
+    const successContext = (
+      h.auditService.logInfo.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>
+    )[0][1];
+    expect(successContext.metadata).toMatchObject({
+      tool: 'MessageSendText',
+      tier: 'write',
+      authMode: 'api-key',
+    });
+    expect(JSON.stringify(h.auditService.logInfo.mock.calls)).not.toContain('super-secret-key');
+  });
+
+  it('records an authenticated MCP tool failure separately from auth failures', async () => {
+    const h = mount();
+    h.authService.validateApiKey.mockResolvedValue({ id: 'key-2', role: 'operator' });
+    (h.tool.handler as jest.Mock).mockRejectedValueOnce(new Error('provider down'));
+    await post(h, { jsonrpc: '2.0', id: 1 }, { authorization: 'Bearer secret-two' });
+
+    await toolCallback()(
+      { sessionId: 's1', to: '123', text: 'hi' },
+      { requestInfo: { headers: { authorization: 'Bearer secret-two' } } },
+    );
+
+    expect(h.auditService.logWarn).toHaveBeenCalledWith(
+      AuditAction.MCP_TOOL_FAILED,
+      expect.objectContaining({
+        apiKeyId: 'key-2',
+        method: 'POST',
+        path: '/mcp',
+        errorMessage: 'provider down',
+      }),
+    );
+    const failureContext = (
+      h.auditService.logWarn.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>
+    )[0][1];
+    expect(failureContext.metadata).toMatchObject({
+      tool: 'MessageSendText',
+      tier: 'write',
+      authMode: 'api-key',
+    });
+    expect(JSON.stringify(h.auditService.logWarn.mock.calls)).not.toContain('secret-two');
   });
 
   it('refuses an invalid API key inside the dispatch: tool error result, tool handler never runs', async () => {

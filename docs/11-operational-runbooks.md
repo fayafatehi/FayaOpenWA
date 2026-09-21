@@ -371,10 +371,10 @@ docker compose down
 # - Configuration changes
 # - Database migrations
 
-# 8. Start services
+# 9. Start services
 docker compose up -d
 
-# 9. Wait for health
+# 10. Wait for health
 sleep 30
 curl http://localhost:2785/api/health
 
@@ -400,6 +400,30 @@ curl -H "X-API-Key: $API_KEY" \
 # Test message flow
 # Send test message and verify webhook received
 ```
+
+---
+
+### Runbook: Enable Built-in Docker Orchestration
+
+**Use only when:** the Dashboard's built-in Postgres, Redis, or MinIO lifecycle controls are required.
+
+The default production stack leaves the Docker socket proxy disabled. OpenWA still starts normally;
+`DockerService` reports Docker unavailable and the built-in orchestration controls degrade
+gracefully. Enabling the profile expands the API container's trust boundary to the Docker daemon,
+because the proxy cannot constrain container-create bind mounts.
+
+```bash
+# Start the normal stack plus the privileged orchestration helper.
+docker compose --profile orchestration up -d
+
+# Verify the proxy is present only when explicitly enabled.
+docker compose --profile orchestration ps docker-proxy
+```
+
+To return to the safer default, stop the profile-managed proxy and bring up the ordinary stack
+without `--profile orchestration`. Existing datastore containers and named volumes must be handled
+according to their normal data-retention/backup procedure; do not delete persistent volumes merely
+to disable the proxy.
 
 ---
 
@@ -444,10 +468,14 @@ docker compose down
 git pull
 # or pin to a release: git checkout v<new-version>
 
-# 6. Build the new image
+# 6. Validate the browser strategy and dated risk exceptions in the checked-out release.
+#    This validates identity policy/exception freshness; it is not a live CVE feed.
+npm run check:browser-security
+
+# 7. Build the new image
 docker compose build openwa-api
 
-# 7. Run database migrations (if any)
+# 8. Run database migrations (if any)
 # Use migration:run:prod in the production image — `migration:run` needs ts-node + the TS
 # source, both stripped from the prod image by `npm ci --omit=dev`.
 docker compose run --rm openwa-api npm run migration:run:prod
@@ -459,14 +487,14 @@ docker compose up -d
 sleep 30
 curl http://localhost:2785/api/health
 
-# 10. Verify version (`version` is only included for an authenticated request)
+# 11. Verify version (`version` is only included for an authenticated request)
 curl -H "X-API-Key: $API_KEY" http://localhost:2785/api/health | jq '.version'
 
-# 11. Verify all sessions
+# 12. Verify all sessions
 curl -H "X-API-Key: $API_KEY" \
   http://localhost:2785/api/sessions
 
-# 12. Test critical flows — send through a live session ({sessionId} from step 11)
+# 13. Test critical flows — send through a live session ({sessionId} from step 11)
 curl -X POST http://localhost:2785/api/sessions/{sessionId}/messages/send-text \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \

@@ -55,6 +55,17 @@ export function validatePluginManifest(manifest: unknown): asserts manifest is P
       `Plugin type "${m.type}" is not installable — only extension plugins can be installed (engines and other tiers are built-in).`,
     );
   }
+  if (m.trustMode !== undefined && m.trustMode !== 'trusted-inprocess' && m.trustMode !== 'untrusted') {
+    throw new Error(
+      `manifest.json trustMode must be "trusted-inprocess" or "untrusted" (got ${JSON.stringify(m.trustMode)})`,
+    );
+  }
+  if (m.trustMode === 'untrusted') {
+    throw new Error(
+      `Plugin "${m.id}" declares trustMode "untrusted", but no OS-isolated runner is configured for plugins. ` +
+        'Refusing to execute untrusted code inside the in-process worker_threads sandbox.',
+    );
+  }
   assertMainContained(m.main);
 }
 

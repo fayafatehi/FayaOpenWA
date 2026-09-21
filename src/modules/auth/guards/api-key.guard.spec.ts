@@ -13,6 +13,7 @@ function createMockApiKey(overrides: Partial<ApiKey> = {}): ApiKey {
     id: 'uuid-1',
     name: 'Test Key',
     keyHash: 'hash',
+    hashVersion: 'sha256-v1',
     keyPrefix: 'owa_k1_xxxx',
     role: ApiKeyRole.OPERATOR,
     allowedIps: null,

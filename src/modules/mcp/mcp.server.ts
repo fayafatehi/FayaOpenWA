@@ -120,23 +120,52 @@ function buildServer(
       },
       async (input: Record<string, unknown>, extra: ToolExtra) => {
         const rawKey = extractApiKey(extra);
+        let authenticatedApiKeyId: string | undefined;
+        const provenance = {
+          tool: tool.name,
+          tier: tool.tier,
+          authMode: 'api-key',
+          readOnly: tool.tier === 'read',
+        };
         try {
           const result = await invokeTool(
             tool,
             input,
             rawKey,
             authService,
-            id => rateLimiter.check(id),
+            id => {
+              authenticatedApiKeyId = id;
+              rateLimiter.check(id);
+            },
             // onAuthFailure: mirror the REST ApiKeyGuard — record rejected/denied auth attempts (401/403
             // only) at the auth boundary so the audit trail covers MCP credential probing. Fires inside
             // invokeTool's auth phase (before the tool handler), so handler-thrown 403s are NOT mislabeled
             // as auth failures. Best-effort; success and non-auth errors skip this.
             error => auditMcpAuthFailure(auditService, error, reqContext),
           );
+          if (auditService && authenticatedApiKeyId) {
+            await auditService.logInfo(AuditAction.MCP_TOOL_INVOKED, {
+              apiKeyId: authenticatedApiKeyId,
+              ipAddress: reqContext.ipAddress,
+              method: reqContext.method,
+              path: reqContext.path,
+              metadata: provenance,
+            });
+          }
           return tool.resultDisposition === 'json'
             ? jsonToolResult(result as object)
             : smartToolResult(result as object);
         } catch (error) {
+          if (auditService && authenticatedApiKeyId) {
+            await auditService.logWarn(AuditAction.MCP_TOOL_FAILED, {
+              apiKeyId: authenticatedApiKeyId,
+              ipAddress: reqContext.ipAddress,
+              method: reqContext.method,
+              path: reqContext.path,
+              metadata: provenance,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
+          }
           return handleToolError(error);
         }
       },

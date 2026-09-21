@@ -33,6 +33,8 @@ export enum PluginStatus {
   ERROR = 'error',
 }
 
+export type PluginTrustMode = 'trusted-inprocess' | 'untrusted';
+
 // ============================================================================
 // Plugin Manifest
 // ============================================================================
@@ -47,6 +49,11 @@ export interface PluginManifest {
   homepage?: string;
   repository?: string;
   license?: string;
+
+  // Execution trust declaration. Missing preserves the historical trusted-inprocess behavior.
+  // "untrusted" is a declaration only: core refuses it until an OS-isolated runner exists rather
+  // than silently running hostile code inside the worker_threads reliability sandbox.
+  trustMode?: PluginTrustMode;
 
   // Entry point
   main: string; // Relative path to main file

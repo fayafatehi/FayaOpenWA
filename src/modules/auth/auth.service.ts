@@ -11,7 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, UpdateQueryBuilder, DeleteQueryBuilder, type QueryDeepPartialEntity } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { ipMatches } from '../../common/utils/ip';
-import { hashApiKey } from './api-key-hash';
+import { API_KEY_HASH_VERSIONS, hashApiKeyForVersion, hashApiKeyRecord } from './api-key-hash';
 import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
@@ -124,9 +124,12 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   private async readLiveBootstrapKey(): Promise<string | null> {
     const rawKey = readBootstrapKey(this.logger);
     if (!rawKey) return null;
-    const stored = await this.apiKeyRepository.findOne({ where: { keyHash: this.hashKey(rawKey) } });
+    const stored = await this.findApiKeyByRawKey(rawKey);
     const live = Boolean(stored && stored.isActive && (!stored.expiresAt || stored.expiresAt > new Date()));
-    if (live) return rawKey;
+    if (live && stored) {
+      await this.upgradeLegacyApiKeyHash(stored, rawKey);
+      return rawKey;
+    }
     if (!stored) {
       // A hash miss alone does not prove the key is gone: the same raw key hashes differently under
       // a changed API_KEY_PEPPER. The prefix is seeded unhashed alongside the key, so it still finds
@@ -154,17 +157,18 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
    */
   private removeBootstrapKeyFileIfMatching(apiKey: ApiKey): void {
     const fileKey = readBootstrapKey(this.logger);
-    if (!fileKey || this.hashKey(fileKey) !== apiKey.keyHash) return;
+    if (!fileKey || !this.rawKeyMatchesStoredHash(fileKey, apiKey)) return;
     removeBootstrapKey('its key was revoked or deleted', this.logger);
   }
 
   private async seedApiKey(rawKey: string, name: string, role: ApiKeyRole): Promise<ApiKey> {
-    const keyHash = this.hashKey(rawKey);
+    const { keyHash, hashVersion } = hashApiKeyRecord(rawKey, process.env.API_KEY_PEPPER);
     const keyPrefix = rawKey.substring(0, 12);
 
     const apiKey = this.apiKeyRepository.create({
       name,
       keyHash,
+      hashVersion,
       keyPrefix,
       role,
     });
@@ -175,12 +179,13 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   async createApiKey(dto: CreateApiKeyDto): Promise<{ apiKey: ApiKey; rawKey: string }> {
     // Generate secure random key: owa_k1_<32 bytes hex>
     const rawKey = `owa_k1_${randomBytes(32).toString('hex')}`;
-    const keyHash = this.hashKey(rawKey);
+    const { keyHash, hashVersion } = hashApiKeyRecord(rawKey, process.env.API_KEY_PEPPER);
     const keyPrefix = rawKey.substring(0, 12);
 
     const apiKey = this.apiKeyRepository.create({
       name: dto.name,
       keyHash,
+      hashVersion,
       keyPrefix,
       role: dto.role || ApiKeyRole.OPERATOR,
       allowedIps: dto.allowedIps || null,
@@ -436,8 +441,11 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     // authenticates over REST but fails on the WebSocket handshake (the CONNECT payload carries the
     // literal string) — the dashboard then runs commands fine while never receiving events, and the
     // session looks permanently disconnected. Whitespace is never part of a key.
-    const keyHash = this.hashKey(rawKey?.trim());
-    const apiKey = await this.apiKeyRepository.findOne({ where: { keyHash } });
+    const normalizedKey = rawKey?.trim();
+    if (!normalizedKey) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+    const apiKey = await this.findApiKeyByRawKey(normalizedKey);
 
     if (!apiKey) {
       throw new UnauthorizedException('Invalid API key');
@@ -473,14 +481,94 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Only a fully authorized request may mutate credential storage. A revoked/expired/IP-denied/
+    // session-denied legacy key therefore never gets upgraded merely because its digest matched.
+    await this.upgradeLegacyApiKeyHash(apiKey, normalizedKey);
+
     // Advisory stats only; the tracker coalesces the write and never throws.
     await this.usageTracker.record(apiKey);
 
     return apiKey;
   }
 
-  private hashKey(rawKey: string): string {
-    return hashApiKey(rawKey, process.env.API_KEY_PEPPER);
+  /**
+   * Resolve a raw key using the current preferred hash first, then the legacy SHA-256 representation.
+   * This method is lookup-only: authorization must succeed before upgradeLegacyApiKeyHash mutates a row.
+   */
+  private async findApiKeyByRawKey(rawKey: string): Promise<ApiKey | null> {
+    const pepper = process.env.API_KEY_PEPPER;
+    const preferred = hashApiKeyRecord(rawKey, pepper);
+    const direct = await this.apiKeyRepository.findOne({
+      where: { keyHash: preferred.keyHash, hashVersion: preferred.hashVersion },
+    });
+    if (direct) return direct;
+    if (!pepper) return null;
+
+    const legacyHash = hashApiKeyForVersion(rawKey, API_KEY_HASH_VERSIONS.SHA256_V1);
+    return this.apiKeyRepository.findOne({
+      where: { keyHash: legacyHash, hashVersion: API_KEY_HASH_VERSIONS.SHA256_V1 },
+    });
+  }
+
+  /**
+   * Best-effort post-auth migration from sha256-v1 to the configured HMAC representation.
+   * The optimistic WHERE clause makes concurrent upgrades safe and prevents overwriting a row that
+   * an administrator or another request has already changed.
+   */
+  private async upgradeLegacyApiKeyHash(apiKey: ApiKey, rawKey: string): Promise<void> {
+    const pepper = process.env.API_KEY_PEPPER;
+    if (!pepper || apiKey.hashVersion !== API_KEY_HASH_VERSIONS.SHA256_V1) return;
+
+    const legacyHash = hashApiKeyForVersion(rawKey, API_KEY_HASH_VERSIONS.SHA256_V1);
+    if (apiKey.keyHash !== legacyHash) return;
+
+    const preferred = hashApiKeyRecord(rawKey, pepper);
+    const criteria = {
+      id: apiKey.id,
+      keyHash: legacyHash,
+      hashVersion: API_KEY_HASH_VERSIONS.SHA256_V1,
+    };
+    const patch = {
+      keyHash: preferred.keyHash,
+      hashVersion: preferred.hashVersion,
+    };
+
+    try {
+      const result = await this.apiKeyRepository.update(criteria, patch);
+      if (result.affected) {
+        apiKey.keyHash = preferred.keyHash;
+        apiKey.hashVersion = preferred.hashVersion;
+        return;
+      }
+
+      const raced = await this.apiKeyRepository.findOne({
+        where: { keyHash: preferred.keyHash, hashVersion: preferred.hashVersion },
+      });
+      if (raced?.id === apiKey.id) {
+        apiKey.keyHash = raced.keyHash;
+        apiKey.hashVersion = raced.hashVersion;
+        return;
+      }
+      this.logger.warn('Legacy API key hash upgrade affected no row; it will be retried later', {
+        keyId: apiKey.id,
+        action: 'api_key_hash_upgrade_race',
+      });
+    } catch (error) {
+      this.logger.warn('Failed to upgrade legacy API key hash; authentication remains valid', {
+        keyId: apiKey.id,
+        action: 'api_key_hash_upgrade_failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private rawKeyMatchesStoredHash(rawKey: string, apiKey: ApiKey): boolean {
+    const version = apiKey.hashVersion || API_KEY_HASH_VERSIONS.SHA256_V1;
+    try {
+      return hashApiKeyForVersion(rawKey, version, process.env.API_KEY_PEPPER) === apiKey.keyHash;
+    } catch {
+      return false;
+    }
   }
 
   private isIpAllowed(clientIp: string, allowedIps: string[]): boolean {

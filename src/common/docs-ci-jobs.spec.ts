@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -71,5 +71,71 @@ describe('docs/09 §9.6 matches the CI workflow', () => {
     const listed = row?.match(/after ([a-z0-9/-]+) jobs pass/);
     expect(listed).not.toBeNull();
     expect(listed?.[1].split('/')).toEqual(needsOf('build'));
+  });
+});
+
+describe('production hardening documentation stays aligned with enforced controls', () => {
+  const root = join(__dirname, '..', '..');
+  const read = (...parts: string[]): string => readFileSync(join(root, ...parts), 'utf8');
+
+  it('documents Docker orchestration as explicit opt-in', () => {
+    const security = read('SECURITY.md');
+    const devops = read('docs', '10-devops-infrastructure.md');
+    const runbooks = read('docs', '11-operational-runbooks.md');
+
+    for (const doc of [security, devops, runbooks]) {
+      expect(doc).toMatch(/docker compose --profile orchestration up -d/);
+    }
+    expect(security).toMatch(/docker-proxy[^\n]*disabled by default|disabled by default[^\n]*docker-proxy/i);
+  });
+
+  it('documents fail-closed advisory evidence in security-sensitive workflows', () => {
+    const devops = read('docs', '10-devops-infrastructure.md');
+    const risks = read('docs', '16-risk-management.md');
+
+    expect(devops).toContain('AUDIT_UNAVAILABLE_POLICY=fail');
+    expect(risks).toContain('AUDIT_UNAVAILABLE_POLICY=fail');
+  });
+
+  it('documents browser identity evidence without claiming live advisory completeness', () => {
+    const security = read('SECURITY.md');
+    const devops = read('docs', '10-devops-infrastructure.md');
+    const runbooks = read('docs', '11-operational-runbooks.md');
+    const risks = read('docs', '16-risk-management.md');
+
+    for (const doc of [security, devops, risks]) {
+      expect(doc).toContain('check:browser-security');
+      expect(doc).toMatch(/not[- ]verified|does not (?:prove|establish|verify).*advis/i);
+    }
+    expect(runbooks).toContain('npm run check:browser-security');
+  });
+
+  it('keeps GitHub production governance explicitly pending administrator action', () => {
+    const path = join(root, 'docs', 'production-github-governance-runbook.md');
+    expect(existsSync(path)).toBe(true);
+    if (!existsSync(path)) return;
+
+    const runbook = readFileSync(path, 'utf8');
+    expect(runbook).toMatch(/PENDING ADMINISTRATOR ACTION/i);
+    expect(runbook).toMatch(/merg(?:e|ing).*does not apply/i);
+    expect(runbook).toMatch(/require.*pull request/i);
+    expect(runbook).toMatch(/required status checks/i);
+    for (const job of [
+      'Lint',
+      'Security audit',
+      'Test',
+      'Test (PostgreSQL migrations)',
+      'Dashboard',
+      'Shell scripts',
+      'Helm chart and workflows',
+      'Build',
+      'Docker Build',
+    ]) {
+      expect(runbook).toContain(job);
+    }
+    expect(runbook).toMatch(/force push/i);
+    expect(runbook).toMatch(/delet/i);
+    expect(runbook).toContain('v*');
+    expect(runbook).toMatch(/immutable release/i);
   });
 });

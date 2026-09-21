@@ -20,6 +20,7 @@ function createMockApiKey(overrides: Partial<ApiKey> = {}): ApiKey {
     id: 'uuid-1',
     name: 'Test Key',
     keyHash: hashKey('test-key'),
+    hashVersion: 'sha256-v1',
     keyPrefix: 'test-key-pre',
     role: ApiKeyRole.OPERATOR,
     allowedIps: null,
@@ -1092,6 +1093,67 @@ describe('AuthService', () => {
       delete process.env.API_KEY_PEPPER;
       const queried = await queriedHash('owa_raw_key');
       expect(queried).toBe(createHash('sha256').update('owa_raw_key').digest('hex'));
+    });
+
+    it('keeps a legacy SHA-256 key valid after pepper enablement and upgrades its stored hash version', async () => {
+      process.env = { ...ORIGINAL_ENV, API_KEY_PEPPER: 'server-pepper' };
+      const rawKey = 'legacy-before-pepper';
+      const legacy = createMockApiKey({
+        keyHash: createHash('sha256').update(rawKey).digest('hex'),
+        lastUsedAt: new Date(),
+      }) as ApiKey & { hashVersion: string };
+      legacy.hashVersion = 'sha256-v1';
+
+      (repository.findOne as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(legacy);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await expect(service.validateApiKey(rawKey)).resolves.toMatchObject({ id: legacy.id });
+
+      expect(repository.findOne).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: {
+            keyHash: createHmac('sha256', 'server-pepper').update(rawKey).digest('hex'),
+            hashVersion: 'hmac-sha256-v1',
+          },
+        }),
+      );
+      expect(repository.findOne).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: {
+            keyHash: createHash('sha256').update(rawKey).digest('hex'),
+            hashVersion: 'sha256-v1',
+          },
+        }),
+      );
+      expect(repository.update).toHaveBeenCalledWith(
+        {
+          id: legacy.id,
+          keyHash: createHash('sha256').update(rawKey).digest('hex'),
+          hashVersion: 'sha256-v1',
+        },
+        {
+          keyHash: createHmac('sha256', 'server-pepper').update(rawKey).digest('hex'),
+          hashVersion: 'hmac-sha256-v1',
+        },
+      );
+    });
+
+    it('does not upgrade a legacy hash when authorization fails after the digest match', async () => {
+      process.env = { ...ORIGINAL_ENV, API_KEY_PEPPER: 'server-pepper' };
+      const rawKey = 'revoked-legacy-key';
+      const legacy = createMockApiKey({
+        keyHash: createHash('sha256').update(rawKey).digest('hex'),
+        isActive: false,
+      }) as ApiKey & { hashVersion: string };
+      legacy.hashVersion = 'sha256-v1';
+
+      (repository.findOne as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(legacy);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await expect(service.validateApiKey(rawKey)).rejects.toThrow('API key is revoked');
+      expect(repository.update).not.toHaveBeenCalled();
     });
   });
 });
