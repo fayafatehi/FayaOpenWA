@@ -215,10 +215,12 @@ flowchart TB
 
 ### Dependency Security
 
-- [ ] npm audit clean
+- [ ] Root and dashboard dependency gates reviewed; HIGH/CRITICAL exceptions are explicit and time-bounded
+- [ ] Security-sensitive root audits use `AUDIT_UNAVAILABLE_POLICY=fail`
 - [ ] Dependabot alerts reviewed
-- [ ] Dependencies up to date
-- [ ] No known vulnerabilities
+- [ ] Browser identity/exception policy passes `npm run check:browser-security`
+- [ ] Browser exception review dates have not expired
+- [ ] Dependencies are updated or carry a documented, reviewable exception
 ```
 
 **Incident Response Plan:**
@@ -313,6 +315,18 @@ Dependencies (`whatsapp-web.js`, Puppeteer, NestJS, etc.) may have vulnerabiliti
 **Mitigation Strategies:**
 
 > **Current state:** the real dependency check is a dedicated `audit` job in `ci.yml` running `npm run check:audit` over the root tree and `npm audit --audit-level=high` over `dashboard/` (on push and PR); it is deliberately split out of the `Lint` job so a newly published advisory cannot abort the other quality gates. `check:audit` keeps the `high` threshold but applies it per advisory, so one with no patched version can be excused by id in `scripts/check-audit.mjs` — with its reason and removal condition recorded, and a stale entry failing the job — instead of lowering the bar for everything. `release.yml` repeats both and additionally runs a Trivy image scan (`CRITICAL,HIGH`, `ignore-unfixed`) against an explicit `.trivyignore` before the release tags are promoted. Dependabot PRs cover npm for `/` and `/dashboard` (weekly), GitHub Actions (monthly) and Docker base/compose images (weekly), with version-pinned ignores (seven in the root tree, two in `/dashboard`) whose reasons and lift conditions are recorded in `.github/dependabot.yml`. Between releases, `.github/workflows/security-scan.yml` (Scheduled Security Scan) runs every Wednesday at 03:00 UTC and on demand: it repeats the `audit` job and the release Trivy scan against the published `latest` image on amd64 and arm64, so an advisory those gates would block fails a run within a week of being published; the amd64 Chrome for Testing binary stays outside what Trivy can see (see `.trivyignore`). There is **no** Snyk integration. The workflow below is a recommended enhancement to add Snyk; its scheduled `npm audit` is already covered by `security-scan.yml`.
+
+> **Fail-closed evidence rule:** the root audit steps in CI, the scheduled security workflow, and the
+> release gate set `AUDIT_UNAVAILABLE_POLICY=fail`. An unavailable npm advisory service therefore
+> blocks those security-sensitive paths rather than turning “not checked” into a green result.
+>
+> **Browser-specific assurance:** `npm run check:browser-security` validates the Dockerfile browser
+> strategy and the dated exceptions in `scripts/browser-security-exceptions.json`. Scheduled and
+> release image scans also execute the actual browser binary for amd64 and arm64 and record its
+> version. This does not establish live advisory completeness; the emitted
+> `advisoryCoverage=not-verified` state is deliberate. Browser exceptions must be re-reviewed before
+> their `reviewBy` date, and a passing generic Trivy result must not be described as proof that the
+> browser has no open advisories.
 
 ```yaml
 # .github/workflows/security.yml
