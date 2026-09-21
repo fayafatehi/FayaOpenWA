@@ -115,6 +115,11 @@
 > stays joined. That minute is the current worst case for a socket streaming events its key has just
 > lost; a key's REST calls are rejected immediately everywhere, since REST reads the row per request.
 >
+> **Enforced deployment boundary.** The shipped Helm chart now refuses to render when
+> `replicaCount` is anything other than `1`. This turns the support statement into an executable
+> deployment gate: operators cannot accidentally produce a valid-looking multi-replica StatefulSet
+> from the supported chart while the process-local gaps below remain.
+>
 > **What does not exist yet, and is why one replica is still the answer.** The cross-replica gap just
 > named (WS rate-limit state) remains process-local. Not every lifecycle path is fenced: the
 > liveness watchdog and reconnect timers still act on whatever is in the local
