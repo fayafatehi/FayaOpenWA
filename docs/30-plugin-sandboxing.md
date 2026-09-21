@@ -1,19 +1,23 @@
 # 30 — Plugin Sandboxing
 
-OpenWA runs **untrusted plugins** (anything loaded from the plugins directory) in an isolated worker
-thread, separate from the first-party built-ins (the two engine adapters) which run in-process. This
-page describes the security model honestly — what the sandbox guarantees and, just as important, what
-it does not — and what changes for plugin authors.
+OpenWA runs installed extension plugins in a `worker_thread` for **fault/resource containment**,
+not as a hostile-code security boundary. Worker plugins share the OpenWA process's OS identity,
+filesystem permissions, address space, and ambient Node built-ins. Install only code you trust unless
+it is moved behind a separate OS-isolated runner.
 
 ## Trust tiers
 
-| Tier                   | Examples                                           | Runs                 | Capabilities                       |
-| ---------------------- | -------------------------------------------------- | -------------------- | ---------------------------------- |
-| **Built-in (trusted)** | the two engine adapters (whatsapp-web.js, baileys) | in-process           | direct, full speed                 |
-| **Untrusted**          | anything in the plugins directory                  | in a `worker_thread` | only via the host-validated bridge |
+| Tier                          | Examples                                           | Runs                 | Security meaning |
+| ----------------------------- | -------------------------------------------------- | -------------------- | ---------------- |
+| **Built-in (trusted)**        | the two engine adapters (whatsapp-web.js, baileys) | in-process           | trusted application code |
+| **`trusted-inprocess`**     | installed extension plugins                       | in a `worker_thread` | trusted code with failure/resource containment |
+| **`untrusted` declaration** | future hostile-code plugins                        | **refused today**    | requires an OS-isolated runner that is not implemented yet |
 
-The loader routes by tier automatically: a plugin registered programmatically is built-in; one loaded
-from disk is untrusted and sandboxed.
+A plugin manifest may omit `trustMode` (backward-compatible `trusted-inprocess`) or set
+`trustMode: "trusted-inprocess"`. A manifest declaring `trustMode: "untrusted"` is rejected at the
+shared install/boot validator. OpenWA deliberately refuses to downgrade that declaration into the
+worker-thread runtime, because doing so would turn an explicit trust boundary into a false security
+claim.
 
 ## What the sandbox guarantees
 
@@ -65,21 +69,13 @@ from reading files the OpenWA process can read or making outbound network connec
 the _integrity_ of the host (no host-object compromise, contained faults, mediated capabilities) — not
 the _confidentiality_ of the host filesystem against deliberate Node-builtin abuse.
 
-For genuinely untrusted, third-party plugins, combine the sandbox with **OS-level containment**:
+For genuinely untrusted, third-party plugins, **do not load them into the current plugin runtime**.
+Run them in a separate container/VM/process identity and integrate through OpenWA's authenticated API.
+Container-hardening OpenWA itself is useful defense in depth, but it does not turn a worker thread into
+a per-plugin security boundary because every worker still shares that container and user.
 
-- **Run OpenWA in a container.** The image's entrypoint already drops to the non-root `openwa` user
-  (via `gosu`, after fixing volume ownership). The rest of the confinement comes from the bundled
-  `docker-compose.yml`, not from the image: `read_only: true` rootfs with a tmpfs `/tmp`,
-  `no-new-privileges`, and `cap_drop: ALL` with a minimal re-add
-  (`CHOWN`/`DAC_OVERRIDE`/`FOWNER`/`SETGID`/`SETUID`) that only the root entrypoint uses — once `gosu`
-  setuids, the Node process keeps no effective capabilities. Together these bound what any plugin's
-  `fs`/network access can reach; a plain `docker run` of the image gets none of the compose-level
-  settings, so replicate them yourself if you deploy that way.
-- Until a marketplace exists, the standing guidance remains: **install only plugins you trust.**
-
-A stronger isolation variant (child process with Node's permission model, or an `isolated-vm`) is a
-possible future enhancement for maximum-hostility deployments; the transport is already abstracted
-behind a channel interface so it can slot in without touching plugin code.
+The manifest-level `untrusted` mode is therefore intentionally fail-closed until a separate runner
+with an OS boundary is implemented and wired to the existing capability/channel abstraction.
 
 ## What changes for plugin authors
 
