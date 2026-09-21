@@ -42,11 +42,7 @@ export function hashApiKeyRecord(rawKey: string, pepper?: string): ApiKeyHashRec
  * is enabled, an existing sha256-v1 row must still be verifiable so AuthService can authenticate it
  * once and upgrade it to hmac-sha256-v1. HMAC rows fail closed when the pepper is unavailable.
  */
-export function hashApiKeyForVersion(
-  rawKey: string,
-  version: string,
-  pepper?: string,
-): string {
+export function hashApiKeyForVersion(rawKey: string, version: string, pepper?: string): string {
   switch (version) {
     case API_KEY_HASH_VERSIONS.SHA256_V1:
       return createHash('sha256').update(rawKey).digest('hex');
