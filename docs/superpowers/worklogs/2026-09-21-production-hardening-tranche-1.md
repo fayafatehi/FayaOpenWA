@@ -29,3 +29,10 @@ Task 4: GREEN — final workflow implementation commit a8fc067; PR CI run 355509
 Task 4: Ruling: browser evidence is identity + exception-freshness evidence only; emit `advisoryCoverage=not-verified` even when no exception applies, because Trivy cannot establish amd64 CfT CVE completeness and `ignore-unfixed` intentionally omits some arm64 distro advisories — cost if wrong: operators could mistake a green image scan for a fully patched browser.
 Task 4: Ruling: ordinary PR CI validates the Dockerfile strategy and dated exception policy without executing both image architectures; exact runtime browser versions are executed and recorded in the scheduled/release image-scan jobs where the multi-arch image exists — cost if wrong: a PR cannot prove the built browser binary identity until an image is produced, mitigated by release-time identity enforcement.
 Task 4: complete (commits c85f0ed..a8fc067, tests: `npm run test:scripts` → success; workflow/actionlint → success; security policy validation → success).
+
+Task 5: RED — commit abd55e3; PR CI run 35551125469 passed the normal unit suite and then `npm run test:docs` failed exactly on the missing orchestration opt-in docs, fail-closed audit docs, browser-evidence caveat, and missing GitHub governance runbook.
+Task 5: GREEN — final documentation commit 915eb21; PR CI run 35551300173 passed unit tests, `npm run test:docs`, and `npm run test:scripts`. The only unrelated branch-hygiene failure was one extra blank line in `docs-ci-jobs.spec.ts`, corrected in 06e2a65.
+Task 5: Ruling: record the live GitHub state as observed/pending rather than “fixed”: the API returned no rulesets and `main.protected=false`; merging source documentation cannot apply repository-admin controls — cost if wrong: stakeholders could falsely believe branch/tag governance is enforced when it is not.
+Task 5: complete (commits abd55e3..915eb21, tests: `npm run test:docs` → success; direct branch assertions → green).
+
+Tranche 1 implementation complete. Final full-tree CI gate must run on the post-formatting/post-ledger HEAD before review.
