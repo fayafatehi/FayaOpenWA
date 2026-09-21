@@ -74,7 +74,6 @@ describe('docs/09 §9.6 matches the CI workflow', () => {
   });
 });
 
-
 describe('production hardening documentation stays aligned with enforced controls', () => {
   const root = join(__dirname, '..', '..');
   const read = (...parts: string[]): string => readFileSync(join(root, ...parts), 'utf8');
