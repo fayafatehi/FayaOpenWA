@@ -300,13 +300,14 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
         apiKeyId: 'key-1',
         method: 'POST',
         path: '/mcp',
-        metadata: expect.objectContaining({
-          tool: 'MessageSendText',
-          tier: 'write',
-          authMode: 'api-key',
-        }),
       }),
     );
+    const successContext = (h.auditService.logInfo.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>)[0][1];
+    expect(successContext.metadata).toMatchObject({
+      tool: 'MessageSendText',
+      tier: 'write',
+      authMode: 'api-key',
+    });
     expect(JSON.stringify(h.auditService.logInfo.mock.calls)).not.toContain('super-secret-key');
   });
 
@@ -328,9 +329,14 @@ describe('mountMcpServer (raw-Express request-handling path)', () => {
         method: 'POST',
         path: '/mcp',
         errorMessage: 'provider down',
-        metadata: expect.objectContaining({ tool: 'MessageSendText', tier: 'write', authMode: 'api-key' }),
       }),
     );
+    const failureContext = (h.auditService.logWarn.mock.calls as Array<[unknown, { metadata?: Record<string, unknown> }]>)[0][1];
+    expect(failureContext.metadata).toMatchObject({
+      tool: 'MessageSendText',
+      tier: 'write',
+      authMode: 'api-key',
+    });
     expect(JSON.stringify(h.auditService.logWarn.mock.calls)).not.toContain('secret-two');
   });
 
