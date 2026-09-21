@@ -67,6 +67,8 @@ jobs:
         # laxer than the PR gate, or a HIGH advisory blocked on every PR would still sail through at
         # tag time — and it must not be STRICTER either, or a tag fails on something main has already
         # accepted, which is how a release stalls with nothing actionable to fix.
+        env:
+          AUDIT_UNAVAILABLE_POLICY: fail
         run: npm run check:audit
 
       # Second tree, same rule. The dashboard's runtime deps are bundled into dashboard/dist and the
