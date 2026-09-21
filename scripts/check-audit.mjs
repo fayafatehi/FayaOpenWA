@@ -48,6 +48,28 @@ export function auditUnavailable(report) {
 }
 
 /**
+ * Decide how an unavailable npm advisory service affects this run.
+ *
+ * Local/developer use defaults to `warn` so a registry outage does not make ordinary offline work
+ * impossible. Security-sensitive callers (CI, scheduled scans and releases) opt into `fail`.
+ * Unknown values fail closed instead of silently weakening a misspelled security policy.
+ */
+export function unavailableAuditDecision(report, policy = 'warn') {
+  if (policy !== 'warn' && policy !== 'fail') {
+    throw new Error(
+      `AUDIT_UNAVAILABLE_POLICY must be "warn" or "fail"; received ${JSON.stringify(policy)}`,
+    );
+  }
+
+  const unavailable = auditUnavailable(report);
+  return {
+    unavailable,
+    policy,
+    exitCode: unavailable ? (policy === 'fail' ? 1 : 0) : null,
+  };
+}
+
+/**
  * `npm audit --json` exits non-zero exactly when it found something, so a throw is the normal path
  * and the payload is on stdout either way. Unparseable output, or an `{ error }` payload, means the
  * audit could not be performed and is wrapped as an error rather than read as "no vulnerabilities".
@@ -147,16 +169,29 @@ export function evaluate(report, allowlist = ALLOWLIST) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const report = runAudit();
 
-  // A registry that cannot answer the audit request must not be read as a clean tree, and blocking
-  // every merge while npm's audit endpoint is down (or being retired) is worse than the risk of a
-  // missed advisory for the duration. Skip loudly instead: the gate resumes the moment the endpoint
-  // answers, and a working audit still fails on any unexcused high or critical.
-  if (auditUnavailable(report)) {
-    console.warn(
-      `check:audit SKIPPED: npm audit endpoint is unavailable after a retry (${report?.error?.summary ?? 'no report'}). ` +
-        'Advisories were not checked this run.',
-    );
-    process.exit(0);
+  const policy = process.env.AUDIT_UNAVAILABLE_POLICY ?? 'warn';
+  let unavailableDecision;
+  try {
+    unavailableDecision = unavailableAuditDecision(report, policy);
+  } catch (error) {
+    console.error(`check:audit failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+
+  if (unavailableDecision.unavailable) {
+    const summary = report?.error?.summary ?? 'no report';
+    if (unavailableDecision.exitCode === 1) {
+      console.error(
+        `check:audit BLOCKED: npm audit endpoint is unavailable after a retry (${summary}). ` +
+          'AUDIT_UNAVAILABLE_POLICY=fail requires advisory evidence for this run.',
+      );
+    } else {
+      console.warn(
+        `check:audit SKIPPED: npm audit endpoint is unavailable after a retry (${summary}). ` +
+          'AUDIT_UNAVAILABLE_POLICY=warn allows this local/developer run to continue without advisory evidence.',
+      );
+    }
+    process.exit(unavailableDecision.exitCode);
   }
 
   const errors = evaluate(report);
