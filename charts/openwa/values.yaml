@@ -7,6 +7,7 @@
 # with a session-scoped advisory lock at startup, so simultaneous boots cannot race DDL
 # against the shared migrations ledger. That part is enforced in-process, not by keeping
 # replicaCount at 1 — the process-local state above is what still keeps it at 1.
+# The StatefulSet template enforces this and fails rendering for any other value.
 replicaCount: 1
 
 image:
