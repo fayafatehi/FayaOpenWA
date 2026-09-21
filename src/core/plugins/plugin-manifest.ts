@@ -62,7 +62,7 @@ export function validatePluginManifest(manifest: unknown): asserts manifest is P
   }
   if (m.trustMode === 'untrusted') {
     throw new Error(
-      `Plugin "${m.id}" declares trustMode "untrusted", but no OS-isolated plugin runner is configured. ` +
+      `Plugin "${m.id}" declares trustMode "untrusted", but no OS-isolated runner is configured for plugins. ` +
         'Refusing to execute untrusted code inside the in-process worker_threads sandbox.',
     );
   }
