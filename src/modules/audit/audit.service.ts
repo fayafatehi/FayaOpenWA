@@ -12,6 +12,8 @@ export const MAX_AUDIT_PAGE_SIZE = 200;
 
 interface AuditContext {
   apiKey?: ApiKey;
+  apiKeyId?: string;
+  apiKeyName?: string;
   sessionId?: string;
   sessionName?: string;
   ipAddress?: string;
@@ -88,8 +90,8 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     // blank, defeating the audit trail. Explicit context values still win (e.g. a worker that stamps
     // a system key, or the AUTH_FAILED case which only has an IP).
     const actor = getRequestActor();
-    const apiKeyId = context.apiKey?.id ?? actor?.apiKeyId;
-    const apiKeyName = context.apiKey?.name ?? actor?.apiKeyName;
+    const apiKeyId = context.apiKey?.id ?? context.apiKeyId ?? actor?.apiKeyId;
+    const apiKeyName = context.apiKey?.name ?? context.apiKeyName ?? actor?.apiKeyName;
     const ipAddress = context.ipAddress ?? actor?.ipAddress;
     const metadata =
       context.metadata || requestId ? { ...(context.metadata ?? {}), ...(requestId ? { requestId } : {}) } : null;
