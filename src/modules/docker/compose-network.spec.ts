@@ -5,7 +5,14 @@ import { join } from 'path';
 const yaml = require('js-yaml') as { load: (src: string) => unknown };
 
 interface ComposeFile {
-  services: Record<string, { networks?: string[]; profiles?: string[]; depends_on?: unknown }>;
+  services: Record<
+    string,
+    {
+      networks?: string[];
+      profiles?: string[];
+      depends_on?: Record<string, { required?: boolean }>;
+    }
+  >;
   networks: Record<string, { internal?: boolean }>;
 }
 
@@ -32,7 +39,7 @@ describe('docker-compose network segmentation', () => {
     expect(compose.services['docker-proxy'].profiles).toEqual(['orchestration']);
   });
 
-  it('does not make openwa-api startup depend on the optional docker-proxy', () => {
-    expect(compose.services['openwa-api'].depends_on).toBeUndefined();
+  it('does not make openwa-api startup require the optional docker-proxy', () => {
+    expect(compose.services['openwa-api'].depends_on?.['docker-proxy']?.required).not.toBe(true);
   });
 });
