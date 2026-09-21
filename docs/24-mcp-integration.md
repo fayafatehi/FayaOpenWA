@@ -20,8 +20,8 @@
 | **Per-key rate limiter**                     | ✅ Implemented | `src/modules/mcp/mcp-rate-limit.ts`                  |
 | **Result shaping (smart/json)**              | ✅ Implemented | `src/modules/mcp/tool-result.ts`                     |
 
-| Capability                      | Status        | Notes                                                                 |
-| ------------------------------- | ------------- | --------------------------------------------------------------------- |
+| Capability                      | Status         | Notes                                                                 |
+| ------------------------------- | -------------- | --------------------------------------------------------------------- |
 | **Read-only mode**              | ✅ Implemented | **Default read-only**; set `MCP_READONLY=false` to expose write tools |
 | **OAuth 2.1 (public exposure)** | 🔜 Planned     | Static API key is used today (suitable for self-hosted/internal)      |
 | **MCP tool audit provenance**   | ✅ Implemented | Success/failure records include API-key id, tool/tier and auth mode   |
