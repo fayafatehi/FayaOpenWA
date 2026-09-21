@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/import-upstream.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -28,8 +27,6 @@ jobs:
 
           git remote add destination "https://x-access-token:${GH_TOKEN}@github.com/${DEST_REPO}.git"
 
-          # Preserve complete branch and tag history from upstream while avoiding
-          # GitHub's read-only hidden refs such as refs/pull/*.
           git push --force --prune destination "refs/heads/*:refs/heads/*"
           git push --force destination "refs/tags/*:refs/tags/*"
 
