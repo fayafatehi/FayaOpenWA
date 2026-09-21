@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { auditUnavailable, collectAdvisories, evaluate } from './check-audit.mjs';
+import { auditUnavailable, collectAdvisories, evaluate, unavailableAuditDecision } from './check-audit.mjs';
 
 /**
  * The report shape is taken from a real `npm audit --json` run, not invented: one advisory
@@ -125,4 +125,36 @@ test('a clean or vulnerable report is not audit-unavailable', () => {
   assert.equal(auditUnavailable({}), false);
   assert.equal(auditUnavailable({ vulnerabilities: {} }), false);
   assert.equal(auditUnavailable(puppeteerReport), false);
+});
+
+
+test('audit-unavailable warn policy is non-blocking', () => {
+  assert.deepEqual(unavailableAuditDecision({ error: { summary: 'registry unavailable' } }, 'warn'), {
+    unavailable: true,
+    policy: 'warn',
+    exitCode: 0,
+  });
+});
+
+test('audit-unavailable fail policy is blocking', () => {
+  assert.deepEqual(unavailableAuditDecision({ error: { summary: 'registry unavailable' } }, 'fail'), {
+    unavailable: true,
+    policy: 'fail',
+    exitCode: 1,
+  });
+});
+
+test('invalid audit-unavailable policy fails closed', () => {
+  assert.throws(
+    () => unavailableAuditDecision({ error: { summary: 'registry unavailable' } }, 'ignore'),
+    /AUDIT_UNAVAILABLE_POLICY.*warn.*fail/,
+  );
+});
+
+test('available audit reports are not converted into policy failures', () => {
+  assert.deepEqual(unavailableAuditDecision({ vulnerabilities: {} }, 'fail'), {
+    unavailable: false,
+    policy: 'fail',
+    exitCode: null,
+  });
 });
