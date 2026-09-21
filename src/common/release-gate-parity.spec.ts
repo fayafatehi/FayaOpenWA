@@ -55,7 +55,6 @@ describe('release gate parity (the tag path runs every branch gate)', () => {
   });
 });
 
-
 describe('dependency audit availability policy is fail-closed in security-sensitive workflows', () => {
   const cases: Array<[file: string, job: string]> = [
     ['ci.yml', 'audit'],
