@@ -113,6 +113,8 @@ jobs:
         # advisory with no patched version can be excused BY ID in scripts/check-audit.mjs, with its
         # reason recorded, instead of lowering the bar for everything. The script also fails on an
         # allowlist entry whose advisory has gone, so a carve-out cannot outlive its cause.
+        env:
+          AUDIT_UNAVAILABLE_POLICY: fail
         run: npm run check:audit
 
       # The dashboard is a SECOND dependency tree, and it is the one that reaches a browser: its
