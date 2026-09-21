@@ -18,7 +18,6 @@ describe('hashApiKey', () => {
   });
 });
 
-
 describe('versioned API-key hashing', () => {
   it('labels legacy SHA-256 records explicitly', () => {
     expect(hashApiKeyRecord('owa_secret')).toEqual({
