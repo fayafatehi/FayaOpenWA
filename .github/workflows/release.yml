@@ -624,6 +624,14 @@ jobs:
       # file simply is not there and every entry is silently inert.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Setup Node.js for browser evidence
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up QEMU for cross-architecture browser identity
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
@@ -637,12 +645,29 @@ jobs:
           REPO: ${{ github.repository }}
         run: echo "ref=ghcr.io/${REPO,,}:smoke-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
+      - name: Record browser identity and validate exception policy
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          docker pull --quiet --platform "$PLATFORM" "$IMAGE_REF"
+          observed="$(docker run --rm --platform "$PLATFORM" --entrypoint /usr/local/bin/puppeteer-chrome "$IMAGE_REF" --version 2>&1)"
+          node scripts/check-browser-security.mjs --platform "$PLATFORM" --observed "$observed" | tee /tmp/browser-security.txt
+          {
+            echo "### Browser identity evidence — $PLATFORM"
+            echo '~~~text'
+            cat /tmp/browser-security.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           # trivy reads TRIVY_PLATFORM for its --platform flag. Scanning is static (it reads the
           # image layers, it does not run the image), so no QEMU is needed to inspect the arm64
-          # variant of the manifest — only a pull, which the GHCR login above authorizes.
+          # variant of the manifest — only a pull. QEMU above is for executing the browser binary
+          # to record its exact runtime identity; it is not required by Trivy itself.
           TRIVY_PLATFORM: ${{ matrix.platform }}
         with:
           scan-type: image
