@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 const ALLOWLIST = [];
 
 const BLOCKING = new Set(['high', 'critical']);
+const AUDIT_UNAVAILABLE_POLICIES = new Set(['warn', 'fail']);
 
 /**
  * True when an `npm audit --json` payload is a registry failure rather than a real audit result.
@@ -45,6 +46,28 @@ const BLOCKING = new Set(['high', 'critical']);
  */
 export function auditUnavailable(report) {
   return report == null || typeof report !== 'object' || 'error' in report;
+}
+
+/**
+ * Decide how an unavailable advisory service affects the process.
+ *
+ * Local/developer use defaults to "warn" so a registry outage does not make ordinary local work
+ * impossible. CI, scheduled security scans, and release gates opt into "fail" explicitly so a
+ * security gate can never report success when it did not obtain an audit result.
+ */
+export function unavailableAuditDecision(report, policy = 'warn') {
+  if (!AUDIT_UNAVAILABLE_POLICIES.has(policy)) {
+    throw new Error(
+      `AUDIT_UNAVAILABLE_POLICY must be "warn" or "fail" (received ${JSON.stringify(policy)})`,
+    );
+  }
+
+  const unavailable = auditUnavailable(report);
+  return {
+    unavailable,
+    policy,
+    exitCode: unavailable ? (policy === 'fail' ? 1 : 0) : null,
+  };
 }
 
 /**
