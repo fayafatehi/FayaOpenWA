@@ -1,3 +1,6 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "OpenWA currently supports replicaCount=1 only; multi-replica deployment remains unsupported until all session ownership, WebSocket limits, bulk state, and MCP routing paths are distributed and fenced." }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
