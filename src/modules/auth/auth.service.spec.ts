@@ -1104,9 +1104,7 @@ describe('AuthService', () => {
       }) as ApiKey & { hashVersion: string };
       legacy.hashVersion = 'sha256-v1';
 
-      (repository.findOne as jest.Mock)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(legacy);
+      (repository.findOne as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(legacy);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
       await expect(service.validateApiKey(rawKey)).resolves.toMatchObject({ id: legacy.id });
