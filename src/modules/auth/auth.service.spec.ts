@@ -1138,7 +1138,7 @@ describe('AuthService', () => {
           hashVersion: 'hmac-sha256-v1',
         },
       );
-    })
+    });
 
     it('does not upgrade a legacy hash when authorization fails after the digest match', async () => {
       process.env = { ...ORIGINAL_ENV, API_KEY_PEPPER: 'server-pepper' };
@@ -1155,6 +1155,5 @@ describe('AuthService', () => {
       await expect(service.validateApiKey(rawKey)).rejects.toThrow('API key is revoked');
       expect(repository.update).not.toHaveBeenCalled();
     });
-;
   });
 });
