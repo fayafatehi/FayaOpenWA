@@ -7,6 +7,11 @@ services:
     image: tecnativa/docker-socket-proxy:v0.4.2
     container_name: openwa-docker-proxy
     restart: unless-stopped
+    # Host-equivalent Docker orchestration is deliberately opt-in. The default stack runs
+    # without this sidecar; enable it only when using Dashboard > Infrastructure built-in
+    # datastore orchestration:
+    #   docker compose --profile orchestration up -d
+    profiles: ['orchestration']
     # Only on the isolated internal network — reachable solely by openwa-api, NOT the
     # dashboard or any other peer. `internal: true` also denies the proxy
     # outbound access; it only needs the locally-mounted docker socket.
@@ -24,13 +29,9 @@ services:
       #    admitted to enabled paths as a side effect of POST — OpenWA itself never issues
       #    deletes (profile teardown is stop-only, see DockerService.stopManagedService).
       #  - the proxy cannot scope container-create payloads, so a compromised API container
-      #    could create containers with host bind-mounts. If you don't use the built-in
-      #    datastore orchestration (Dashboard > Infrastructure built-in toggles), disable
-      #    this service entirely, e.g. via a docker-compose.override.yml:
-      #      services:
-      #        docker-proxy:
-      #          profiles: ['disabled']
-      #    DockerService then reports Docker unavailable and orchestration degrades gracefully.
+      #    could create containers with host bind-mounts. The proxy is therefore disabled by
+      #    default and exists only behind the explicit "orchestration" profile. Without that
+      #    profile DockerService reports Docker unavailable and orchestration degrades gracefully.
       CONTAINERS: 1
       IMAGES: 1
       VOLUMES: 1
