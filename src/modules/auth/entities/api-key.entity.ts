@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { API_KEY_HASH_VERSIONS, type ApiKeyHashVersion } from '../api-key-hash';
 
 export enum ApiKeyRole {
   ADMIN = 'admin',
@@ -17,6 +18,9 @@ export class ApiKey {
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 64 })
   keyHash!: string;
+
+  @Column({ type: 'varchar', length: 32, default: API_KEY_HASH_VERSIONS.SHA256_V1 })
+  hashVersion!: ApiKeyHashVersion;
 
   // 12 to fit the 12-char prefix that auth.service writes (was varchar(8); harmless on the
   // hardcoded-SQLite `main` connection, but kept consistent with the code).
