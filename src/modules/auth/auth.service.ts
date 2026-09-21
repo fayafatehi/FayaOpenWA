@@ -130,7 +130,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     if (!rawKey) return null;
     const stored = await this.findApiKeyByRawKey(rawKey);
     const live = Boolean(stored && stored.isActive && (!stored.expiresAt || stored.expiresAt > new Date()));
-    if (live) return rawKey;
+    if (live && stored) {
+      await this.upgradeLegacyApiKeyHash(stored, rawKey);
+      return rawKey;
+    }
     if (!stored) {
       // A hash miss alone does not prove the key is gone: the same raw key hashes differently under
       // a changed API_KEY_PEPPER. The prefix is seeded unhashed alongside the key, so it still finds
@@ -482,6 +485,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Only a fully authorized request may mutate credential storage. A revoked/expired/IP-denied/
+    // session-denied legacy key therefore never gets upgraded merely because its digest matched.
+    await this.upgradeLegacyApiKeyHash(apiKey, normalizedKey);
+
     // Advisory stats only; the tracker coalesces the write and never throws.
     await this.usageTracker.record(apiKey);
 
@@ -490,8 +497,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Resolve a raw key using the current preferred hash first, then the legacy SHA-256 representation.
-   * With a pepper configured, a successful legacy match is upgraded atomically so deployments can
-   * enable API_KEY_PEPPER without invalidating every existing credential at once.
+   * This method is lookup-only: authorization must succeed before upgradeLegacyApiKeyHash mutates a row.
    */
   private async findApiKeyByRawKey(rawKey: string): Promise<ApiKey | null> {
     const pepper = process.env.API_KEY_PEPPER;
@@ -503,52 +509,61 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     if (!pepper) return null;
 
     const legacyHash = hashApiKeyForVersion(rawKey, API_KEY_HASH_VERSIONS.SHA256_V1);
-    const legacy = await this.apiKeyRepository.findOne({
+    return this.apiKeyRepository.findOne({
       where: { keyHash: legacyHash, hashVersion: API_KEY_HASH_VERSIONS.SHA256_V1 },
     });
-    if (!legacy) return null;
+  }
 
-    const upgradeCriteria = {
-      id: legacy.id,
+  /**
+   * Best-effort post-auth migration from sha256-v1 to the configured HMAC representation.
+   * The optimistic WHERE clause makes concurrent upgrades safe and prevents overwriting a row that
+   * an administrator or another request has already changed.
+   */
+  private async upgradeLegacyApiKeyHash(apiKey: ApiKey, rawKey: string): Promise<void> {
+    const pepper = process.env.API_KEY_PEPPER;
+    if (!pepper || apiKey.hashVersion !== API_KEY_HASH_VERSIONS.SHA256_V1) return;
+
+    const legacyHash = hashApiKeyForVersion(rawKey, API_KEY_HASH_VERSIONS.SHA256_V1);
+    if (apiKey.keyHash !== legacyHash) return;
+
+    const preferred = hashApiKeyRecord(rawKey, pepper);
+    const criteria = {
+      id: apiKey.id,
       keyHash: legacyHash,
       hashVersion: API_KEY_HASH_VERSIONS.SHA256_V1,
     };
-    const upgradePatch = {
+    const patch = {
       keyHash: preferred.keyHash,
       hashVersion: preferred.hashVersion,
     };
 
     try {
-      const result = await this.apiKeyRepository.update(upgradeCriteria, upgradePatch);
+      const result = await this.apiKeyRepository.update(criteria, patch);
       if (result.affected) {
-        legacy.keyHash = preferred.keyHash;
-        legacy.hashVersion = preferred.hashVersion;
-      } else {
-        // A concurrent request may have won the same upgrade. Prefer its current row when present.
-        const raced = await this.apiKeyRepository.findOne({
-          where: { keyHash: preferred.keyHash, hashVersion: preferred.hashVersion },
-        });
-        if (raced) return raced;
-        this.logger.warn('Legacy API key hash upgrade affected no row; continuing with the authenticated snapshot', {
-          keyId: legacy.id,
-          action: 'api_key_hash_upgrade_race',
-        });
+        apiKey.keyHash = preferred.keyHash;
+        apiKey.hashVersion = preferred.hashVersion;
+        return;
       }
-    } catch (error) {
-      // Authentication already proved the raw key against the legacy digest. Do not turn a transient
-      // migration write failure into an outage; keep the credential valid and retry the upgrade on a
-      // later successful request. Never log the raw key or pepper.
+
       const raced = await this.apiKeyRepository.findOne({
         where: { keyHash: preferred.keyHash, hashVersion: preferred.hashVersion },
       });
-      if (raced) return raced;
+      if (raced?.id === apiKey.id) {
+        apiKey.keyHash = raced.keyHash;
+        apiKey.hashVersion = raced.hashVersion;
+        return;
+      }
+      this.logger.warn('Legacy API key hash upgrade affected no row; it will be retried later', {
+        keyId: apiKey.id,
+        action: 'api_key_hash_upgrade_race',
+      });
+    } catch (error) {
       this.logger.warn('Failed to upgrade legacy API key hash; authentication remains valid', {
-        keyId: legacy.id,
+        keyId: apiKey.id,
         action: 'api_key_hash_upgrade_failed',
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return legacy;
   }
 
   private rawKeyMatchesStoredHash(rawKey: string, apiKey: ApiKey): boolean {
