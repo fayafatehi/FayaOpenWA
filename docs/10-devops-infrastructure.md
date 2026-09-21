@@ -207,6 +207,16 @@ plugins. Note the example below sets `DATABASE_TYPE=postgres`, so the **data** d
 PostgreSQL and needs its own backup; only with the SQLite default (what the shipped
 `docker-compose.yml` leaves in place) does the data DB sit in this volume too.
 
+The shipped production Compose stack keeps Docker-daemon orchestration **off by default**. The
+`docker-proxy` service is behind the explicit `orchestration` profile because its container-create
+capability can become host-root-equivalent after an API compromise. Normal OpenWA startup works
+without it. Enable it only when the built-in Postgres/Redis/MinIO orchestration is intentionally
+required:
+
+```bash
+docker compose --profile orchestration up -d
+```
+
 ```yaml
 # docker-compose.release.yml (write this yourself; not shipped in the repo)
 version: '3.8'
@@ -327,6 +337,18 @@ gates with a weekly run (Wednesdays 03:00 UTC, plus `workflow_dispatch`): it re-
 `audit` job against the current dependency trees and the release workflow's `image-scan` against
 the published `latest` image on both architectures. A newly published advisory therefore turns
 something red within days instead of waiting for the next push or release.
+
+For the root npm dependency tree, CI, scheduled scans, and release gates set
+`AUDIT_UNAVAILABLE_POLICY=fail`: if the advisory service cannot return evidence after the bounded
+retry, the security gate fails instead of reporting a skip as success.
+
+Browser security is a separate evidence stream. `npm run check:browser-security` validates the
+Dockerfile browser strategy and expiry dates in `scripts/browser-security-exceptions.json` on
+ordinary CI. Scheduled and release image-scan jobs additionally execute the actual
+`/usr/local/bin/puppeteer-chrome --version` inside both amd64 and arm64 images and publish that
+identity to the job summary. This does not establish live advisory completeness; the gate
+deliberately emits `advisoryCoverage=not-verified` because amd64 Chrome for Testing is not owned by
+dpkg/lockfiles and the arm64 Trivy policy uses `ignore-unfixed`.
 
 ## 10.4 Deployment Architecture
 
