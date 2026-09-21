@@ -11,11 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, UpdateQueryBuilder, DeleteQueryBuilder, type QueryDeepPartialEntity } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { ipMatches } from '../../common/utils/ip';
-import {
-  API_KEY_HASH_VERSIONS,
-  hashApiKeyForVersion,
-  hashApiKeyRecord,
-} from './api-key-hash';
+import { API_KEY_HASH_VERSIONS, hashApiKeyForVersion, hashApiKeyRecord } from './api-key-hash';
 import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
