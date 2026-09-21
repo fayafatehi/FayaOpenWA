@@ -50,6 +50,28 @@ the README and `docs/` — in particular `CORS_ORIGINS`, `ALLOW_DEV_API_KEY`,
 Never expose the dashboard/API to the public internet with the development API key
 enabled.
 
+### Production hardening gates
+
+The `docker-proxy` is disabled by default because Docker container-create access can become
+host-root-equivalent after an API compromise. Normal API startup does not require Docker access.
+Enable the proxy only when you intentionally use the built-in datastore orchestration:
+
+```bash
+docker compose --profile orchestration up -d
+```
+
+The root dependency gate supports a developer-friendly warning mode, but every security-sensitive
+GitHub workflow sets `AUDIT_UNAVAILABLE_POLICY=fail`. CI, the scheduled security scan, and the
+release gate therefore cannot report success when the npm advisory service is unavailable.
+
+Browser assurance is tracked separately from the generic image CVE scan. Run
+`npm run check:browser-security` to validate the Dockerfile browser strategy and the dated
+exceptions in `scripts/browser-security-exceptions.json`. Scheduled and release image scans also
+execute `/usr/local/bin/puppeteer-chrome --version` for both architectures and record the observed
+browser identity. This check does not establish live advisory completeness: amd64 Chrome for Testing
+is outside dpkg/lockfile visibility, while the arm64 Trivy lane deliberately ignores vendor-unfixed
+findings. The emitted `advisoryCoverage=not-verified` value is intentional.
+
 If you created your `.env` by copying `.env.example` before this advisory, check it for
 `ENABLE_SWAGGER=true`. Earlier templates shipped that line uncommented alongside
 `NODE_ENV=production`, so a copied file pinned the opt-in that production otherwise
@@ -101,11 +123,10 @@ Mitigations in place: the proxy is unreachable except from `openwa-api` (dedicat
 `internal: true` network), the orchestration endpoints require an ADMIN-role API key,
 both teardown and start are constrained to the three managed profiles (`postgres`,
 `redis`, `minio`) — non-managed names are dropped before reaching `DockerService` —
-and OpenWA itself never issues deletes (profile teardown is stop-only). If you do not
-use the built-in datastore orchestration (Dashboard → Infrastructure built-in
-toggles), disable the proxy entirely — see the `docker-proxy` comments in
-`docker-compose.yml`; `DockerService` then reports Docker unavailable and
-orchestration degrades gracefully.
+and OpenWA itself never issues deletes (profile teardown is stop-only). The shipped Compose file
+therefore keeps the proxy behind the explicit `orchestration` profile. Without that profile,
+`DockerService` reports Docker unavailable and orchestration degrades gracefully; with it, treat
+the API container as part of the Docker daemon trust boundary.
 
 ### Session-restricted API keys
 
