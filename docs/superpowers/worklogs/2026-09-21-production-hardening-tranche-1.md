@@ -8,3 +8,7 @@ Pre-flight: Task 1 produces AUDIT_UNAVAILABLE_POLICY; Task 2 consumes the same e
 Pre-flight: Tasks 3–5 do not share runtime interfaces with Tasks 1–2; they share only CI/doc verification lanes.
 Ruling: use the GitHub branch + draft PR as the isolated execution workspace because the local container cannot clone the repository; use PR Actions as authoritative test execution — cost if wrong: slower RED/GREEN feedback, but no reduction in test coverage.
 Ruling: store the execution ledger under docs/superpowers/worklogs rather than the git-ignored local .superpowers workspace because execution is GitHub-native and must survive tool/session boundaries — cost if wrong: one additional branch-only documentation file, removable before merge.
+
+Task 1: RED — commit b7af040; PR CI run 35547665349 ran unit tests and doc-lint green, then `npm run test:scripts` failed exactly because `./check-audit.mjs` did not export `unavailableAuditDecision`.
+Task 1: GREEN — commit bad964e; PR CI run 35547921286: live Security audit passed; Test job 106177108962 passed unit tests, doc-lint, and `npm run test:scripts`.
+Task 1: complete (commits b7af040..bad964e, tests: `npm run test:scripts` → success; policy helper implements warn/fail and invalid values fail closed).
