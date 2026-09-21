@@ -54,6 +54,8 @@ jobs:
         # check:audit, not bare `npm audit`: the per-advisory allowlist in scripts/check-audit.mjs
         # applies, so an advisory already excused by id (with its recorded reason and drop
         # condition) does not fire a false weekly alarm.
+        env:
+          AUDIT_UNAVAILABLE_POLICY: fail
         run: npm run check:audit
 
       # The dashboard is a second dependency tree and the one that reaches a browser; same
