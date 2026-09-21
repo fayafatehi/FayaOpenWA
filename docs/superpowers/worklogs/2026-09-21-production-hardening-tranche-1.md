@@ -12,3 +12,7 @@ Ruling: store the execution ledger under docs/superpowers/worklogs rather than t
 Task 1: RED — commit b7af040; PR CI run 35547665349 ran unit tests and doc-lint green, then `npm run test:scripts` failed exactly because `./check-audit.mjs` did not export `unavailableAuditDecision`.
 Task 1: GREEN — commit bad964e; PR CI run 35547921286: live Security audit passed; Test job 106177108962 passed unit tests, doc-lint, and `npm run test:scripts`.
 Task 1: complete (commits b7af040..bad964e, tests: `npm run test:scripts` → success; policy helper implements warn/fail and invalid values fail closed).
+
+Task 2: RED — commit f938c6b; PR CI run 35548116371 passed the normal unit suite then `npm run test:docs` failed on all three expected missing `AUDIT_UNAVAILABLE_POLICY=fail` assertions (ci.yml audit, security-scan.yml audit, release.yml lint).
+Task 2: GREEN — final implementation commit 6c4af70; PR CI run 35548293870 passed unit tests, `npm run test:docs`, `npm run test:scripts`, and Helm/workflow validation on the complete three-workflow state.
+Task 2: complete (commits f938c6b..6c4af70, tests: `npm run test:docs` → success; root audit steps fail closed in CI, scheduled security scan, and release).
