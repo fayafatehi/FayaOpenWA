@@ -1,0 +1,37 @@
+name: Import upstream OpenWA
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/import-upstream.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror upstream branches and tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEST_REPO: ${{ github.repository }}
+          UPSTREAM_REPO: rmyndharis/OpenWA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --mirror "https://github.com/${UPSTREAM_REPO}.git" /tmp/openwa-upstream.git
+          cd /tmp/openwa-upstream.git
+
+          git remote add destination "https://x-access-token:${GH_TOKEN}@github.com/${DEST_REPO}.git"
+
+          # Preserve complete branch and tag history from upstream while avoiding
+          # GitHub's read-only hidden refs such as refs/pull/*.
+          git push --force --prune destination "refs/heads/*:refs/heads/*"
+          git push --force destination "refs/tags/*:refs/tags/*"
+
+          echo "Imported upstream ${UPSTREAM_REPO} into ${DEST_REPO}"
+          echo "Upstream main: $(git rev-parse refs/heads/main)"
