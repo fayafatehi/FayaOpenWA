@@ -96,9 +96,14 @@ The compensating gates on the install path:
   install does (`PLUGIN_INSTALL_REQUIRE_PIN`, opt-out documented in `.env.example`);
 - the package manifest is strictly validated and symlink traps are detected at unpack.
 
-If you operate a fleet of plugins you do not fully trust, do not install them into the
-OpenWA process — run them in a separate container/VM with an OS-level sandbox and reach
-OpenWA over the API like any other client.
+Plugin manifests may now declare `trustMode`. Omitted or `trusted-inprocess` keeps the
+current worker-thread runtime. `untrusted` fails closed at both install and boot because
+no OS-isolated plugin runner exists yet; OpenWA will not silently downgrade an explicit
+untrusted declaration into the same-process worker runtime.
+
+If you operate plugins you do not fully trust, do not install them into the OpenWA process —
+run them in a separate container/VM with an OS-level sandbox and reach OpenWA over the API
+like any other client.
 
 ### Docker socket proxy — scope and residual risk
 
@@ -127,6 +132,17 @@ and OpenWA itself never issues deletes (profile teardown is stop-only). The ship
 therefore keeps the proxy behind the explicit `orchestration` profile. Without that profile,
 `DockerService` reports Docker unavailable and orchestration degrades gracefully; with it, treat
 the API container as part of the Docker daemon trust boundary.
+
+### API-key hash migration and pepper
+
+API-key rows carry an explicit hash version. Existing rows are migrated as `sha256-v1`.
+When `API_KEY_PEPPER` is configured, new keys use `hmac-sha256-v1`. A successful
+authentication against a legacy SHA-256 row upgrades that row atomically to the HMAC
+representation, so enabling a pepper no longer requires an immediate all-keys outage.
+
+Changing or losing an already-active pepper still makes existing `hmac-sha256-v1` rows
+unverifiable. Treat the pepper as durable secret material and plan key rotation before
+rotating it. Plaintext keys and pepper values are never written to the audit log.
 
 ### Session-restricted API keys
 
