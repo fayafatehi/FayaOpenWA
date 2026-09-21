@@ -20,6 +20,7 @@ function createMockApiKey(overrides: Partial<ApiKey> = {}): ApiKey {
     id: 'uuid-1',
     name: 'Test Key',
     keyHash: hashKey('test-key'),
+    hashVersion: 'sha256-v1',
     keyPrefix: 'test-key-pre',
     role: ApiKeyRole.OPERATOR,
     allowedIps: null,
