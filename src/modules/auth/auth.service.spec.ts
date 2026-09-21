@@ -1138,6 +1138,23 @@ describe('AuthService', () => {
           hashVersion: 'hmac-sha256-v1',
         },
       );
+    })
+
+    it('does not upgrade a legacy hash when authorization fails after the digest match', async () => {
+      process.env = { ...ORIGINAL_ENV, API_KEY_PEPPER: 'server-pepper' };
+      const rawKey = 'revoked-legacy-key';
+      const legacy = createMockApiKey({
+        keyHash: createHash('sha256').update(rawKey).digest('hex'),
+        isActive: false,
+      }) as ApiKey & { hashVersion: string };
+      legacy.hashVersion = 'sha256-v1';
+
+      (repository.findOne as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(legacy);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await expect(service.validateApiKey(rawKey)).rejects.toThrow('API key is revoked');
+      expect(repository.update).not.toHaveBeenCalled();
     });
+;
   });
 });
