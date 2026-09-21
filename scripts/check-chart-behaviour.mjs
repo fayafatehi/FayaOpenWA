@@ -166,6 +166,27 @@ const check = (id, ok, detail) => results.push({ id, ok, detail });
   );
 }
 
+
+// Supported production topology is one replica. Rendering two replicas must fail loudly rather than
+// producing a valid-looking StatefulSet that still contains process-local authorization/lifecycle
+// state. This is an enforcement gate, not just a comment in values.yaml.
+{
+  let refused = false;
+  let detail = 'replicaCount=2 rendered successfully — unsupported multi-replica topology is not fenced';
+  try {
+    render('--set', 'replicaCount=2');
+  } catch (error) {
+    const stdout = error?.stdout ? String(error.stdout) : '';
+    const stderr = error?.stderr ? String(error.stderr) : '';
+    const message = [stdout, stderr, error instanceof Error ? error.message : String(error)].join('\n');
+    refused = /replicaCount.?1|single.?replica|one replica/i.test(message);
+    detail = refused
+      ? 'replicaCount=2 is rejected with an explicit single-replica support message'
+      : `replicaCount=2 failed, but without the expected support-boundary message: ${message.slice(0, 300)}`;
+  }
+  check('single-replica-only', refused, detail);
+}
+
 const failed = results.filter(r => !r.ok);
 if (failed.length) {
   console.error('\n✖ Chart behaviour check failed:');
